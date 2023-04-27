@@ -10,7 +10,7 @@ core_lm_name="roberta-base" #"xhan77/ssdlm" #"roberta-large"
 main_log_dir=$1
 
 # load from created dataset
-interpret_dataset_tokenized_path="qqp_tokenized"
+interpret_dataset_tokenized_path="/net/nfs.cirrascale/allennlp/hamishi/ssd-lm/qqp_tokenized"
 
 # data hyperparameters
 global_max_seq_len=200

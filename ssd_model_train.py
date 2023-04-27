@@ -439,7 +439,7 @@ def main():
 
     # DataLoaders creation:
     train_dataloader = DataLoader(
-        train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
+        train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size, drop_last=True
     )
     eval_dataloader = DataLoader(
         eval_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size, generator=torch.Generator().manual_seed(42)
