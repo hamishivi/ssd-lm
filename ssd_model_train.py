@@ -52,6 +52,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DataCollatorForLanguageModeling,
+    DataCollatorForSeq2Seq,
     SchedulerType,
     get_scheduler,
     set_seed,
@@ -434,8 +435,7 @@ def main():
 
     # Data collator
     # This one will take care of randomly masking the tokens.
-    assert args.mlm_probability == 0 # diffusion model does not use [MASK]
-    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=args.mlm_probability)
+    data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, label_pad_token_id=tokenizer.pad_token_id)
 
     # DataLoaders creation:
     train_dataloader = DataLoader(
@@ -583,19 +583,23 @@ def main():
         for epoch in range(args.num_train_epochs):
             model.train()
             for step, batch in enumerate(train_dataloader):
-                ctx_low = 1 # using 0 would probably cause hanging issue (parallel device waiting for syncing gradients?)
-                ctx_high = args.max_seq_length - args.decoding_block_size + 1
-                args.context_size = np.random.randint(low=ctx_low, high=ctx_high) # min (1 dec block size), max (max seq length - 1 dec block size)
-                
-                seq_len = args.decoding_block_size
+                # context size is very simply the input ids size.
+                args.context_size = batch['input_ids'].size(1)
+                # seq len is our labels size
+                seq_len = batch['labels'].size(1)
 
                 # split the batch in to the context part and diffusion part
-                diffusion_input_ids = batch['input_ids'][:, args.context_size:args.context_size+seq_len]
-                if args.context_size > 0:
-                    context_input_ids = batch['input_ids'][:, :args.context_size]
-                    context_inputs_embeds = model_embedding_lut(context_input_ids)
-                else:
-                    context_inputs_embeds = None
+                # diffusion_input_ids = batch['input_ids'][:, args.context_size:args.context_size+seq_len]
+                # if args.context_size > 0:
+                #     context_input_ids = batch['input_ids'][:, :args.context_size]
+                #     context_inputs_embeds = model_embedding_lut(context_input_ids)
+                # else:
+                #     context_inputs_embeds = None
+                # change: we condition on 'input ids', and decode 'labels'
+                diffusion_input_ids = batch['labels']
+                context_input_ids = batch['input_ids']
+                combined_input_ids = torch.cat((context_input_ids, diffusion_input_ids), dim=1)
+                context_inputs_embeds = model_embedding_lut(context_input_ids)
 
                 # build alpha according to a pseudo one-hot encoding
                 inputs_diralpha = 2 * one_hot_value * torch.nn.functional.one_hot(diffusion_input_ids, vocab_size) - one_hot_value
@@ -643,7 +647,11 @@ def main():
                 diffusion_embeds = perturbed_inputs_embeds + timestep_embeds
                 if context_inputs_embeds is not None:
                     diffusion_embeds = torch.cat((context_inputs_embeds, diffusion_embeds), dim=1)
-                outputs = model(inputs_embeds=diffusion_embeds, output_hidden_states=False)
+                outputs = model(
+                    inputs_embeds=diffusion_embeds,
+                    output_hidden_states=False,
+                    attention_mask=combined_input_ids != tokenizer.pad_token_id,
+                )
                 equivalent_score = outputs.logits
                 equivalent_score = equivalent_score[:, args.context_size:].contiguous()
 
@@ -665,7 +673,11 @@ def main():
                     loss = torch.lgamma( 0.5 * torch.sum(a + b, dim=-1) ) + 0.5 * torch.sum( torch.lgamma(a) + torch.lgamma(b) , dim=-1) - torch.sum( torch.lgamma( 0.5 * (a + b) ) , dim=-1) - 0.5 * ( torch.lgamma(a0) + torch.lgamma(b0) )
                     loss = torch.mean(loss)
                 elif args.loss_mode == "xe":
-                    loss = torch.nn.functional.cross_entropy(equivalent_score.view(-1, vocab_size), diffusion_input_ids.contiguous().view(-1))
+                    loss = torch.nn.functional.cross_entropy(
+                        equivalent_score.view(-1, vocab_size),
+                        diffusion_input_ids.contiguous().view(-1),
+                        ignore_index=tokenizer.pad_token_id,  # since we have to pass into tokenizer.
+                    )
                     loss = torch.mean(loss)
                 elif args.loss_mode == "l2_on_z":
                     raise ValueError("l2_on_z is disabled for now")

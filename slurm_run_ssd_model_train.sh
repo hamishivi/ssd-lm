@@ -2,15 +2,15 @@
 trap "kill 0" EXIT
 
 script_role="host"
-global_seed=$1 # inline param, 2021, 2022, etc
+global_seed=2023 #$1 # inline param, 2021, 2022, etc
 single_device_cuda="0" # inline param, "0", "1", etc
-multi_device_cuda=$2 # inline param, "0,1,2,3", "0", etc
-hf_cache="/private/home/xhan77/.cache/huggingface"
-core_lm_name="roberta-large"
-main_log_dir="/private/home/xhan77/ssd-lm/logging"
+multi_device_cuda=0 #$2 # inline param, "0,1,2,3", "0", etc
+hf_cache="/net/nfs.cirrascale/allennlp/hamishi/.hf"
+core_lm_name="ssdlm" #"xhan77/ssdlm" #"roberta-large"
+main_log_dir=$1
 
 # load from created dataset
-interpret_dataset_tokenized_path="${main_log_dir}/openwebtext_processed_pct100_blk200"
+interpret_dataset_tokenized_path="qqp_tokenized"
 
 # data hyperparameters
 global_max_seq_len=200
@@ -18,35 +18,35 @@ global_max_seq_len=200
 
 # retrain
 retrain_num_train_epochs=10000 # just a placeholder, use max train steps
-retrain_per_device_train_batch_size=24
+retrain_per_device_train_batch_size=8  # sort of annoying.
 retrain_per_device_eval_batch_size=1
-retrain_learning_rate=$3
+retrain_learning_rate=3e-5
 retrain_weight_decay=0.01
-retrain_gradient_accumulation_steps=8
+retrain_gradient_accumulation_steps=12
 retrain_num_warmup_steps=2000
-retrain_max_train_steps=100000
+retrain_max_train_steps=90000
 
-sigma_num_steps=$4
-loss_mode=$5
-remove_noise_mode=$6
-pa=$7
+# 1e-4 5000 "xe" "no_dir" 5 25 "fp16" 1.0 "resume"
+
+sigma_num_steps=5000
+loss_mode="xe"
+remove_noise_mode="no_dir"
+pa=5
 cs=0 # placeholder
-dbs=$8
-precision=$9 # no or fp16
-noise_manual_scale=${10}
-train_mode=${11}
+dbs=25
+precision="no" # no or fp16
+noise_manual_scale=1.0
+train_mode="train"
 
 ################ START ################
 
 # available_port=$(python -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1]); s.close()')
-available_port=29510
-main_node_name=$(scontrol show hostnames $SLURM_JOB_NODELIST | sort | head -n 1)
-main_ip_address=$(python -c 'import sys; import socket; ip=socket.gethostbyname(sys.argv[1]); print(ip)' ${main_node_name})
+# available_port=29510
+# main_node_name=$(scontrol show hostnames $SLURM_JOB_NODELIST | sort | head -n 1)
+# main_ip_address=$(python -c 'import sys; import socket; ip=socket.gethostbyname(sys.argv[1]); print(ip)' ${main_node_name})
 
-CUDA_VISIBLE_DEVICES=${multi_device_cuda} HF_HOME=${hf_cache} accelerate launch \
-    --multi_gpu --mixed_precision ${precision} \
-    --num_processes $((8*SLURM_JOB_NUM_NODES)) --num_machines ${SLURM_JOB_NUM_NODES} --machine_rank ${SLURM_NODEID} \
-    --main_process_ip ${main_ip_address} --main_process_port ${available_port} \
+CUDA_VISIBLE_DEVICES=${multi_device_cuda} HF_HOME=${hf_cache} accelerate launch --mixed_precision ${precision} \
+    --num_processes 1 --num_machines 1 --machine_rank 0 \
     --num_cpu_threads_per_process 2 \
     ssd_model_train.py \
     --max_seq_length ${global_max_seq_len} \

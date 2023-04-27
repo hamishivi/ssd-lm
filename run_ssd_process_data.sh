@@ -7,9 +7,9 @@ script_role="host"
 global_seed=$1 # inline param, 2021, 2022, etc
 single_device_cuda="0" # inline param, "0", "1", etc
 multi_device_cuda="0" # inline param, "0,1,2,3", "0", etc
-hf_cache="/private/home/xhan77/.cache/huggingface"
+hf_cache="/net/nfs.cirrascale/allennlp/hamishi/.hf"
 core_lm_name="roberta-large"
-main_log_dir="/private/home/xhan77/ssd-lm/logging"
+main_log_dir="logging"
 
 interpret_dataset_name="openwebtext" # just the dataset name, please ignore the "interpret" prefix :)
 interpret_dataset_config_name="none"
