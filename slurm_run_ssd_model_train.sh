@@ -6,7 +6,7 @@ global_seed=2023 #$1 # inline param, 2021, 2022, etc
 single_device_cuda="0" # inline param, "0", "1", etc
 multi_device_cuda=0 #$2 # inline param, "0,1,2,3", "0", etc
 hf_cache="/net/nfs.cirrascale/allennlp/hamishi/.hf"
-core_lm_name="ssdlm" #"xhan77/ssdlm" #"roberta-large"
+core_lm_name="roberta-base" #"xhan77/ssdlm" #"roberta-large"
 main_log_dir=$1
 
 # load from created dataset
